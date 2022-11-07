@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	dto "go-batch2/dto/result"
@@ -11,6 +12,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cloudinary/cloudinary-go/v2"
+	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/mux"
@@ -104,6 +107,9 @@ func (h *handler) FindUserById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// for claudinary
+	user.Image = os.Getenv("UPLOAD_PATH_NAME") + user.Image
+
 	w.WriteHeader(http.StatusOK)
 	response := dto.SuccessResult{Status: "Success", Data: user}
 	json.NewEncoder(w).Encode(response)
@@ -137,13 +143,35 @@ func (h *handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(mux.Vars(r)["id"])
 	var request usersdto.UpdateUserRequest
 
-	dataUpload := r.Context().Value("dataFile")
-	var filename string
-	if dataUpload != "" {
-		filename = dataUpload.(string)
+	// dataUpload := r.Context().Value("dataFile")
+	// var filename string
+	// if dataUpload != "" {
+	// 	filename = dataUpload.(string)
+
+	dataContex := r.Context().Value("dataFile")
+	filepath := dataContex.(string)
+
+	var ctx = context.Background()
+	var CLOUD_NAME = os.Getenv("CLOUD_NAME")
+	var API_KEY = os.Getenv("API_KEY")
+	var API_SECRET = os.Getenv("API_SECRET")
+
+	cld, _ := cloudinary.NewFromParams(CLOUD_NAME, API_KEY, API_SECRET)
+
+	resp, err := cld.Upload.Upload(ctx, filepath, uploader.UploadParams{Folder: "foodways"})
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := dto.ErrorResult{Status: "Failed", Message: err.Error()}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if dataContex != "" {
+
 		request = usersdto.UpdateUserRequest{
 			FullName: r.FormValue("fullname"),
-			Image:    os.Getenv("UPLOAD_path_name") + filename,
+			Image:    resp.SecureURL,
 			Email:    r.FormValue("email"),
 			Phone:    r.FormValue("phone"),
 			Location: r.FormValue("location"),
@@ -165,7 +193,7 @@ func (h *handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if request.Image != "" {
-		userModel.Image = request.Image
+		userModel.Image = resp.SecureURL
 	}
 
 	if request.Email != "" {

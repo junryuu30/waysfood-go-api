@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	productdto "go-batch2/dto/product"
 	dto "go-batch2/dto/result"
@@ -10,6 +11,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cloudinary/cloudinary-go/v2"
+	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/mux"
@@ -37,7 +40,8 @@ func (h *handlerProduct) GetProducts(w http.ResponseWriter, r *http.Request) {
 
 	// set product image below
 	for i, p := range products {
-		products[i].Image = os.Getenv("UPLOAD_PATH_NAME") + p.Image
+		imagePath := os.Getenv("PATH_FILE") + p.Image
+		products[i].Image = imagePath
 	}
 	// set product image above
 
@@ -94,8 +98,24 @@ func (h *handlerProduct) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	userInfo := r.Context().Value("userInfo").(jwt.MapClaims)
 	userId := int(userInfo["id"].(float64))
 
-	dataUpload := r.Context().Value("dataFile")
-	filename := dataUpload.(string)
+	dataContex := r.Context().Value("dataFile")
+	filepath := dataContex.(string)
+
+	var ctx = context.Background()
+	var CLOUD_NAME = os.Getenv("CLOUD_NAME")
+	var API_KEY = os.Getenv("API_KEY")
+	var API_SECRET = os.Getenv("API_SECRET")
+
+	cld, _ := cloudinary.NewFromParams(CLOUD_NAME, API_KEY, API_SECRET)
+
+	resp, err := cld.Upload.Upload(ctx, filepath, uploader.UploadParams{Folder: "foodways"})
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := dto.ErrorResult{Status: "Failed", Message: err.Error()}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
 	price, _ := strconv.Atoi(r.FormValue("price"))
 	qty, _ := strconv.Atoi(r.FormValue("qty"))
@@ -107,7 +127,7 @@ func (h *handlerProduct) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	validation := validator.New()
-	err := validation.Struct(request)
+	err = validation.Struct(request)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := dto.ErrorResult{Status: "Failed", Message: err.Error()}
@@ -118,7 +138,7 @@ func (h *handlerProduct) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	product := models.Product{
 		Title:  request.Title,
 		Price:  request.Price,
-		Image:  os.Getenv("UPLOAD_PATH_NAME") + filename,
+		Image:  resp.SecureURL,
 		Qty:    request.Qty,
 		UserID: userId,
 	}
