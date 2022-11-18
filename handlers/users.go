@@ -158,7 +158,7 @@ func (h *handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	cld, _ := cloudinary.NewFromParams(CLOUD_NAME, API_KEY, API_SECRET)
 
-	resp, err := cld.Upload.Upload(ctx, filepath, uploader.UploadParams{Folder: "foodways"})
+	resp, err := cld.Upload.Upload(ctx, filepath, uploader.UploadParams{Folder: "waysfood"})
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
